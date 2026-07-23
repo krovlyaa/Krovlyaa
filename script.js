@@ -937,6 +937,100 @@ function initLeadInline() {
   });
 }
 
+/* ==========================================================================
+   Склад — автоплей главного видео в кадре + видео-лайтбокс
+   ========================================================================== */
+const warehouseVideos = [
+  { src: 'videos/warehouse-1.mp4', cap: 'Наш склад — обход, материалы в наличии' },
+  { src: 'videos/warehouse-2.mp4', cap: 'Склад: материалы и комплектующие' },
+  { src: 'videos/warehouse-3.mp4', cap: 'Материалы перед отправкой на объект' },
+  { src: 'videos/warehouse-4.mp4', cap: 'Склад — материалы свои' },
+];
+
+function initWarehouse() {
+  const mainVideo = document.querySelector('[data-wh-main]');
+  const root = document.querySelector('[data-warehouse]');
+  if (!mainVideo && !root) return;
+
+  // Главное видео: грузим и играем только когда попало в кадр (экономим трафик)
+  if (mainVideo) {
+    if ('IntersectionObserver' in window) {
+      const io = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) mainVideo.play().catch(() => {});
+          else mainVideo.pause();
+        });
+      }, { threshold: 0.35 });
+      io.observe(mainVideo);
+    } else {
+      mainVideo.setAttribute('autoplay', '');
+    }
+  }
+
+  if (!root) return;
+
+  const box = document.createElement('div');
+  box.className = 'olb';
+  box.setAttribute('role', 'dialog');
+  box.setAttribute('aria-modal', 'true');
+  box.innerHTML = `
+    <button class="olb-x" data-vlb-x aria-label="Закрыть">&times;</button>
+    <button class="olb-nav olb-prev" data-vlb-prev aria-label="Предыдущее видео">&lsaquo;</button>
+    <video class="olb-video" data-vlb-video controls playsinline preload="metadata"></video>
+    <button class="olb-nav olb-next" data-vlb-next aria-label="Следующее видео">&rsaquo;</button>
+    <div class="olb-cap" data-vlb-cap></div>`;
+  document.body.appendChild(box);
+
+  const videoEl = box.querySelector('[data-vlb-video]');
+  const capEl = box.querySelector('[data-vlb-cap]');
+  let i = 0;
+
+  const show = () => {
+    const item = warehouseVideos[i];
+    videoEl.src = item.src;
+    videoEl.play().catch(() => {});
+    capEl.textContent = `${i + 1} / ${warehouseVideos.length} · ${item.cap}`;
+  };
+  const open = (n) => {
+    i = n;
+    if (mainVideo) mainVideo.pause();
+    show();
+    box.classList.add('open');
+    document.body.style.overflow = 'hidden';
+  };
+  const close = () => {
+    box.classList.remove('open');
+    videoEl.pause();
+    videoEl.removeAttribute('src');
+    videoEl.load();
+    document.body.style.overflow = '';
+  };
+  const next = () => { i = (i + 1) % warehouseVideos.length; show(); };
+  const prev = () => { i = (i - 1 + warehouseVideos.length) % warehouseVideos.length; show(); };
+
+  root.querySelectorAll('[data-wh-index]').forEach((thumb) => {
+    thumb.addEventListener('click', () => open(Number(thumb.dataset.whIndex)));
+  });
+  box.querySelector('[data-vlb-x]').onclick = close;
+  box.querySelector('[data-vlb-next]').onclick = next;
+  box.querySelector('[data-vlb-prev]').onclick = prev;
+  box.addEventListener('click', (e) => { if (e.target === box) close(); });
+  document.addEventListener('keydown', (e) => {
+    if (!box.classList.contains('open')) return;
+    if (e.key === 'Escape') close();
+    if (e.key === 'ArrowRight') next();
+    if (e.key === 'ArrowLeft') prev();
+  });
+  let sx = null;
+  box.addEventListener('touchstart', (e) => { sx = e.touches[0].clientX; }, { passive: true });
+  box.addEventListener('touchend', (e) => {
+    if (sx === null) return;
+    const dx = e.changedTouches[0].clientX - sx;
+    if (Math.abs(dx) > 50) (dx < 0 ? next() : prev());
+    sx = null;
+  }, { passive: true });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   initUrgency();
   initHeader();
@@ -950,6 +1044,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initCases();
   initPricedCases();
   initObjectGallery();
+  initWarehouse();
   initFaq();
   initStickyCta();
   initReveal();
